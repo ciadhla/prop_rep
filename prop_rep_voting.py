@@ -25,8 +25,6 @@ def check_format(df):
         raise ValueError('The specified document is of the incorrect format. '
                          'Column headings must be of the form "Position [Name]".')
 
-    # assert df.map(np.isreal).all().all(), "Not all cells contain numbers."
-
 
 def make_candidate_dictionary():
     """Create dictionary of positions and candidates with empty counts"""
