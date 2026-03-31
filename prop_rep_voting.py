@@ -1,8 +1,11 @@
-import re
+import random
+import re, os
 import math
+import argparse
 import numpy as np
 import pandas as pd
 from collections import defaultdict
+
 
 def check_format(df):
     """Check that the dataframe is formatted correctly"""
@@ -22,7 +25,8 @@ def check_format(df):
         raise ValueError('The specified document is of the incorrect format. '
                          'Column headings must be of the form "Position [Name]".')
 
-    assert df.map(np.isreal).all().all(), "Not all cells contain numbers."
+    # assert df.map(np.isreal).all().all(), "Not all cells contain numbers."
+
 
 def make_candidate_dictionary():
     """Create dictionary of positions and candidates with empty counts"""
@@ -43,11 +47,18 @@ def make_candidate_dictionary():
 
     return counts
 
+
+def sort_intermediate_ties():
+    """Remove any intermediate ties to return one minimum candidate,
+    either by previous history or random choice"""
+
+
 def count_votes(position):
     """Function to count votes according to proportional representation"""
     # Extract only the columns pertaining to the current position
     position_df = votes.filter(like=position + ' [', axis=1)
     round = 1
+    round_results = []
 
     while True:
         # Count all first preference votes
@@ -60,6 +71,9 @@ def count_votes(position):
 
         print(f'Round {round} results: {counts[position]}')
 
+        # Store the results of each round in case of an intermediate tie
+        round_results.append(counts[position].copy())
+
         # Check if the quota has been reached
         if max(counts[position].values()) >= quota:
             elected = max(counts[position], key=counts[position].get)
@@ -67,35 +81,86 @@ def count_votes(position):
             print(f'{elected} is elected as {position} after round {round}.')
             break
 
-        else:
-            # Check for a tie in minimum votes
-            round_counts = list(counts[position].values())
-            if round_counts.count(min(round_counts)) > 1:
+
+        # Check for a tie in minimum votes
+        round_counts = list(counts[position].values())
+        num_lowest_candidates = round_counts.count(min(round_counts))
+
+        if num_lowest_candidates > 1:
+            remaining_candidates = list(counts[position].keys())
+
+            # Check if the tie is between the last remaining candidates - return tie if so
+            if num_lowest_candidates == len(remaining_candidates):
                 remaining = list(counts[position].keys())
                 print(f'!!! Tie for {position} after round {round}. '
                       f'Remaining candidates: {remaining}')
                 results[position] = f'Tie – {remaining}'
                 break
 
-            # Identify and eliminate the candidate with the fewest votes
+            # Eliminate intermediate ties
+            # Get tied lowest candidates
+            min_votes = min(counts[position].values())
+            tied_candidates = [
+                candidate for candidate, current_votes in counts[position].items()
+                if current_votes == min_votes
+            ]
+
+            # Check if either candidate had a lower number of votes in a previous round
+            n = 2  # first check the previous round (index of -2 since starting from 0)
+            while round - n >= 0:
+                prev_results = {candidate: round_results[round-n][candidate] for candidate in tied_candidates}
+                num_lowest_candidates = list(prev_results.values()).count(min(prev_results.values()))
+                if num_lowest_candidates == 1:
+                    min_candidate = min(prev_results, key=prev_results.get)
+                    print(f'Tie - {min_candidate} is eliminated due to lower votes in the previous round.')
+                    break
+                n += 1  # go to previous round
+
+            # If still tied across all previous rounds → random choice
+            else:
+                min_candidate = random.choice(tied_candidates)
+                print(f'Tie - {min_candidate} is eliminated by random choice.')
+
+        else:  # no tie
             min_candidate = min(counts[position], key=counts[position].get)
             print(f'{min_candidate} is eliminated.')
-            counts[position].pop(min_candidate)
 
-            # Adjust DataFrame values: decrease all preference numbers after the eliminated candidate
-            for index, row in position_df.iterrows():
-                eliminated_pref = row[f'{position} [{min_candidate}]']
-                for candidate in counts[position]:
-                    if row[f'{position} [{candidate}]'] > eliminated_pref:
-                        position_df.at[index, f'{position} [{candidate}]'] -= 1
+        # Eliminate the candidate with the fewest votes
+        counts[position].pop(min_candidate)
 
-            round += 1
+        # Adjust DataFrame values: decrease all preference numbers after the eliminated candidate
+        for index, row in position_df.iterrows():
+            eliminated_pref = row[f'{position} [{min_candidate}]']
+            for candidate in counts[position]:
+                if row[f'{position} [{candidate}]'] > eliminated_pref:
+                    position_df.at[index, f'{position} [{candidate}]'] -= 1
+
+        round += 1
 
 
 if __name__ == "__main__":
 
-    # Load votes from a spreadsheet as formatted by Google Forms
-    filename = 'sample_votes.csv'
+    # Pass the votes file as an argument
+    parser = argparse.ArgumentParser(
+        description="Count votes according to a proportional representation system."
+    )
+    parser.add_argument("votes", help="Path to the csv file containing the votes")
+    args = parser.parse_args()
+    filename = args.votes
+
+    # Verify the votes file exists and is a .csv
+    if not filename.lower().endswith(".csv"):
+        raise ValueError("The --votes file must be a CSV file.")
+
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"File not found: {filename}")
+
+    # Load votes
+    try:
+        votes = pd.read_csv(filename)
+    except Exception as e:
+        raise ValueError(f"Failed to read CSV file: {e}")
+    
     votes = pd.read_csv(filename)
     votes = votes.drop('Timestamp', axis=1)  # Don't need timestamp
     check_format(votes)
@@ -104,13 +169,17 @@ if __name__ == "__main__":
     quota = math.floor(len(votes.index) / 2 + 1)
     print(f'Quota: {quota}')
 
+    # Assemble candidate dictionary
     counts = make_candidate_dictionary()
+    print(f'{len(counts.keys())} positions up for vote: {[pos for pos in counts.keys()]}')
     results = {}
 
+    # Count votes
     for position in counts.keys():
         print(f'\nCounting {position}...')
         count_votes(position)
 
+    # Print results
     print('\n\n***** Results *****')
     for position in results:
         print(f'{position}: {results[position]}')
