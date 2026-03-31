@@ -6,4 +6,8 @@ The counter was created to work with Google Sheets. Each position must be entere
 
 Open the form responses in Google Sheets and export them as a .csv file with the default settings.
 
-Change the file name in the main part of the code to your filepath.
+### Usage
+
+```bash
+python prop_rep_voting.py votes.csv
+```
