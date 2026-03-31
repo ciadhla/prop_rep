@@ -1,8 +1,7 @@
-import random
 import re, os
+import random
 import math
 import argparse
-import numpy as np
 import pandas as pd
 from collections import defaultdict
 
@@ -44,11 +43,6 @@ def make_candidate_dictionary():
         counts[position][name] = 0
 
     return counts
-
-
-def sort_intermediate_ties():
-    """Remove any intermediate ties to return one minimum candidate,
-    either by previous history or random choice"""
 
 
 def count_votes(position):
