@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Committee Election — Vote Counter</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f1eb;
+    --surface: #faf8f4;
+    --ink: #1a1814;
+    --ink-2: #5a564f;
+    --ink-3: #9a9590;
+    --accent: #2d5a27;
+    --accent-light: #e8f2e6;
+    --accent-mid: #4a8c41;
+    --warn: #8b3a1a;
+    --warn-light: #fdf0eb;
+    --border: #ddd9d2;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 3rem;
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    background: var(--surface);
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  header span {
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    font-family: var(--mono);
+  }
+
+  main {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 3rem 2rem 6rem;
+  }
+
+  .status-bar {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ink-3);
+    transition: background 0.3s;
+  }
+  .status-dot.ready { background: var(--accent-mid); }
+  .status-dot.loading { background: #c0a020; animation: pulse 1s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 4px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .upload-icon {
+    font-family: var(--mono);
+    font-size: 2rem;
+    color: var(--ink-3);
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  .upload-zone p {
+    font-size: 0.9rem;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+
+  .upload-zone .filename {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--accent);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  .btn {
+    display: block;
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 0.9rem 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+  }
+
+  .btn:hover:not(:disabled) { background: #234820; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .log-section {
+    margin-top: 2.5rem;
+    display: none;
+  }
+
+  .log-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    margin-bottom: 0.5rem;
+  }
+
+  .log-box {
+    background: #1e1c18;
+    color: #c8c4bb;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.7;
+    padding: 1.25rem 1.5rem;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+
+  .log-box .log-quota  { color: #7ec8e3; }
+  .log-box .log-round  { color: #c8c4bb; }
+  .log-box .log-elim   { color: #e8a87c; }
+  .log-box .log-tie    { color: #e8d47c; }
+  .log-box .log-elect  { color: #82c882; font-weight: 500; }
+  .log-box .log-err    { color: #e87c7c; }
+
+  .results-section {
+    margin-top: 2rem;
+    display: none;
+  }
+
+  .results-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    margin-bottom: 0.75rem;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.1rem 1.5rem;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .result-position {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--ink-2);
+    flex-shrink: 0;
+  }
+
+  .result-name {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--ink);
+    text-align: right;
+  }
+
+  .result-name.tie {
+    color: var(--warn);
+    font-size: 0.88rem;
+  }
+
+  .result-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-left: 0.75rem;
+    vertical-align: middle;
+  }
+
+  .badge-elected { background: var(--accent-light); color: var(--accent); }
+  .badge-tie { background: var(--warn-light); color: var(--warn); }
+
+  .error-box {
+    background: var(--warn-light);
+    border: 1px solid #e0b8a8;
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--warn);
+    margin-top: 1.25rem;
+    display: none;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>vote-counter</h1>
+  <span>proportional representation · browser-based · no data leaves your device</span>
+</header>
+
+<main>
+  <div class="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Loading Python runtime…</span>
+  </div>
+
+  <div class="upload-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".csv" disabled>
+    <span class="upload-icon">⇪</span>
+    <p>Drop your votes CSV here, or click to select</p>
+    <p style="font-size:0.78rem;color:var(--ink-3);margin-top:0.4rem">Columns must follow the format: <code style="font-family:var(--mono)">Position [Candidate Name]</code></p>
+    <div class="filename" id="filename-display"></div>
+  </div>
+
+  <button class="btn" id="run-btn" disabled>Count votes</button>
+
+  <div class="error-box" id="error-box"></div>
+
+  <div class="results-section" id="results-section">
+    <div class="results-label">Results</div>
+    <div id="results-cards"></div>
+  </div>
+
+  <div class="log-section" id="log-section">
+    <div class="log-label">Round-by-round log</div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+<script>
+let pyodide = null;
+let csvText = null;
+
+const statusDot  = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const fileInput  = document.getElementById('file-input');
+const dropZone   = document.getElementById('drop-zone');
+const filenameDisplay = document.getElementById('filename-display');
+const runBtn     = document.getElementById('run-btn');
+const logSection = document.getElementById('log-section');
+const logBox     = document.getElementById('log-box');
+const errorBox   = document.getElementById('error-box');
+const resultsSection = document.getElementById('results-section');
+const resultsCards   = document.getElementById('results-cards');
+
+function setStatus(state, msg) {
+  statusText.textContent = msg;
+  statusDot.className = 'status-dot ' + state;
+}
+
+async function initPyodide() {
+  setStatus('loading', 'Loading Python runtime…');
+  pyodide = await loadPyodide();
+  setStatus('loading', 'Loading pandas…');
+  await pyodide.loadPackage('pandas');
+  setStatus('ready', 'Ready');
+  fileInput.disabled = false;
+}
+
+initPyodide();
+
+function handleFile(file) {
+  if (!file || !file.name.endsWith('.csv')) {
+    showError('Please select a .csv file.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    csvText = e.target.result;
+    filenameDisplay.textContent = file.name;
+    runBtn.disabled = false;
+    hideError();
+  };
+  reader.readAsText(file);
+}
+
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.style.display = 'block';
+}
+function hideError() {
+  errorBox.style.display = 'none';
+}
+
+function formatLog(raw) {
+  return raw.split('\n').map(line => {
+    if (line.startsWith('Quota:')) return `<span class="log-quota">${esc(line)}</span>`;
+    if (line.startsWith('Round')) return `<span class="log-round">${esc(line)}</span>`;
+    if (line.includes('is eliminated')) return `<span class="log-elim">${esc(line)}</span>`;
+    if (line.startsWith('!!!') || line.toLowerCase().includes('tie')) return `<span class="log-tie">${esc(line)}</span>`;
+    if (line.includes('is elected')) return `<span class="log-elect">${esc(line)}</span>`;
+    if (line.startsWith('Error') || line.startsWith('Traceback')) return `<span class="log-err">${esc(line)}</span>`;
+    return esc(line);
+  }).join('\n');
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+runBtn.addEventListener('click', async () => {
+  if (!csvText) return;
+  runBtn.disabled = true;
+  runBtn.textContent = 'Counting…';
+  hideError();
+  logSection.style.display = 'none';
+  resultsSection.style.display = 'none';
+  logBox.innerHTML = '';
+  resultsCards.innerHTML = '';
+
+  const output = [];
+
+  pyodide.globals.set('csv_text', csvText);
+  pyodide.setStdout({ batched: s => output.push(s) });
+  pyodide.setStderr({ batched: s => output.push('Error: ' + s) });
+
+  const code = `
+import re, io, math, random
+import pandas as pd
+from collections import defaultdict
+
+def check_format(df):
+    positions = set()
+    names = set()
+    col_name_regex = re.compile(r'(.*)\\s\\[(.*)\\]')
+    for col in df.columns:
+        try:
+            match = re.match(col_name_regex, col)
+            position, name = match.groups()
+            positions.add(position)
+            names.add(name)
+        except:
+            continue
+    if len(positions) == 0 or len(names) == 0:
+        raise ValueError('Incorrect format. Column headings must be of the form "Position [Name]".')
+
+def make_candidate_dictionary(votes):
+    counts = defaultdict(dict)
+    col_name_regex = re.compile(r'(.*)\\s\\[(.*)\\]')
+    for column in votes.columns:
+        try:
+            match = re.match(col_name_regex, column)
+            position, name = match.groups()
+        except:
+            continue
+        counts[position][name] = 0
+    return counts
+
+def count_votes(position, votes, counts, quota, results):
+    position_df = votes.filter(like=position + ' [', axis=1).copy()
+    round_num = 1
+    round_results = []
+
+    while True:
+        for index, row in position_df.iterrows():
+            for candidate in counts[position]:
+                if row[f'{position} [{candidate}]'] == 1:
+                    counts[position][candidate] += 1
+                    position_df.at[index, f'{position} [{candidate}]'] = 0
+                    break
+
+        print(f'Round {round_num} results: {counts[position]}')
+        round_results.append(counts[position].copy())
+
+        if max(counts[position].values()) >= quota:
+            elected = max(counts[position], key=counts[position].get)
+            results[position] = elected
+            print(f'{elected} is elected as {position} after round {round_num}.')
+            break
+
+        round_counts = list(counts[position].values())
+        num_lowest = round_counts.count(min(round_counts))
+
+        if num_lowest > 1:
+            remaining = list(counts[position].keys())
+            if num_lowest == len(remaining):
+                print(f'!!! Tie for {position} after round {round_num}. Remaining candidates: {remaining}')
+                results[position] = f'Tie – {remaining}'
+                break
+
+            min_votes = min(counts[position].values())
+            tied = [c for c, v in counts[position].items() if v == min_votes]
+
+            n = 2
+            eliminated = None
+            while round_num - n >= 0:
+                prev = {c: round_results[round_num-n][c] for c in tied}
+                if list(prev.values()).count(min(prev.values())) == 1:
+                    eliminated = min(prev, key=prev.get)
+                    print(f'Tie - {eliminated} is eliminated due to lower votes in round {round_num-n+1}.')
+                    break
+                n += 1
+            if eliminated is None:
+                eliminated = random.choice(tied)
+                print(f'Tie - {eliminated} is eliminated by random choice.')
+            min_candidate = eliminated
+        else:
+            min_candidate = min(counts[position], key=counts[position].get)
+            print(f'{min_candidate} is eliminated.')
+
+        counts[position].pop(min_candidate)
+        for index, row in position_df.iterrows():
+            elim_pref = row[f'{position} [{min_candidate}]']
+            for candidate in counts[position]:
+                if row[f'{position} [{candidate}]'] > elim_pref:
+                    position_df.at[index, f'{position} [{candidate}]'] -= 1
+
+        round_num += 1
+
+# --- main ---
+try:
+    votes = pd.read_csv(io.StringIO(csv_text))
+    if 'Timestamp' in votes.columns:
+        votes = votes.drop('Timestamp', axis=1)
+    check_format(votes)
+
+    quota = math.floor(len(votes.index) / 2 + 1)
+    print(f'Quota: {quota}')
+
+    counts = make_candidate_dictionary(votes)
+    print(f'{len(counts)} positions up for vote: {list(counts.keys())}')
+
+    results = {}
+    for position in counts.keys():
+        print(f'\\nCounting {position}...')
+        count_votes(position, votes, counts, quota, results)
+
+    print('\\n\\n***** Results *****')
+    for position, winner in results.items():
+        print(f'{position}: {winner}')
+
+    import json
+    result_json = json.dumps(results)
+    print('__RESULTS_JSON__' + result_json)
+except Exception as e:
+    print(f'Error: {e}')
+    result_json = '{}'
+`;
+
+  try {
+    await pyodide.runPythonAsync(code);
+  } catch(e) {
+    output.push('Error: ' + e.message);
+  }
+
+  const fullOutput = output.join('\n');
+
+  // Extract JSON results
+  let resultsData = {};
+  const jsonMarker = '__RESULTS_JSON__';
+  const jsonIdx = fullOutput.indexOf(jsonMarker);
+  let displayOutput = fullOutput;
+  if (jsonIdx !== -1) {
+    const jsonStr = fullOutput.slice(jsonIdx + jsonMarker.length).split('\n')[0];
+    displayOutput = fullOutput.slice(0, jsonIdx);
+    try { resultsData = JSON.parse(jsonStr); } catch(e) {}
+  }
+
+  // Show log
+  logSection.style.display = 'block';
+  logBox.innerHTML = formatLog(displayOutput.trim());
+  logBox.scrollTop = logBox.scrollHeight;
+
+  // Show results cards
+  if (Object.keys(resultsData).length > 0) {
+    resultsSection.style.display = 'block';
+    for (const [position, winner] of Object.entries(resultsData)) {
+      const isTie = typeof winner === 'string' && winner.startsWith('Tie');
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      card.innerHTML = `
+        <span class="result-position">${esc(position)}</span>
+        <span class="result-name ${isTie ? 'tie' : ''}">
+          ${esc(Array.isArray(winner) ? winner.join(', ') : winner)}
+          <span class="result-badge ${isTie ? 'badge-tie' : 'badge-elected'}">${isTie ? 'tie' : 'elected'}</span>
+        </span>
+      `;
+      resultsCards.appendChild(card);
+    }
+  } else if (displayOutput.includes('Error:')) {
+    showError(displayOutput.match(/Error:.*/)?.[0] || 'An error occurred. Check the log below.');
+  }
+
+  runBtn.disabled = false;
+  runBtn.textContent = 'Count votes';
+});
+</script>
+</body>
+</html>
