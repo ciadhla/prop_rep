@@ -291,6 +291,9 @@
 <script>
 let pyodide = null;
 let csvText = null;
+let pythonSource = null;
+
+const SCRIPT_URL = 'https://raw.githubusercontent.com/ciadhla/prop_rep/main/prop_rep_voting.py';
 
 const statusDot  = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
@@ -311,7 +314,17 @@ function setStatus(state, msg) {
 
 async function initPyodide() {
   setStatus('loading', 'Loading Python runtime…');
-  pyodide = await loadPyodide();
+  const [py] = await Promise.all([
+    loadPyodide(),
+    fetch(SCRIPT_URL)
+      .then(r => {
+        if (!r.ok) throw new Error(`Could not fetch script (${r.status})`);
+        return r.text();
+      })
+      .then(src => { pythonSource = src; })
+      .catch(e => { showError('Failed to load voting script from GitHub: ' + e.message); })
+  ]);
+  pyodide = py;
   setStatus('loading', 'Loading pandas…');
   await pyodide.loadPackage('pandas');
   setStatus('ready', 'Ready');
@@ -379,106 +392,28 @@ runBtn.addEventListener('click', async () => {
   logBox.innerHTML = '';
   resultsCards.innerHTML = '';
 
+  if (!pythonSource) {
+    showError('Voting script not loaded. Please refresh the page.');
+    runBtn.disabled = false;
+    runBtn.textContent = 'Count votes';
+    return;
+  }
+
   const output = [];
 
   pyodide.globals.set('csv_text', csvText);
   pyodide.setStdout({ batched: s => output.push(s) });
   pyodide.setStderr({ batched: s => output.push('Error: ' + s) });
 
-  const code = `
-import re, io, math, random
-import pandas as pd
-from collections import defaultdict
+  // Strip the __main__ block from the script and replace it with a
+  // browser-compatible entry point that reads from csv_text (already
+  // set as a Pyodide global above) and emits a JSON marker for results.
+  const mainIndex = pythonSource.indexOf("if __name__");
+  const libraryCode = mainIndex !== -1 ? pythonSource.slice(0, mainIndex) : pythonSource;
 
-def check_format(df):
-    positions = set()
-    names = set()
-    col_name_regex = re.compile(r'(.*)\\s\\[(.*)\\]')
-    for col in df.columns:
-        try:
-            match = re.match(col_name_regex, col)
-            position, name = match.groups()
-            positions.add(position)
-            names.add(name)
-        except:
-            continue
-    if len(positions) == 0 or len(names) == 0:
-        raise ValueError('Incorrect format. Column headings must be of the form "Position [Name]".')
+  const entryPoint = `
+import io, math, json
 
-def make_candidate_dictionary(votes):
-    counts = defaultdict(dict)
-    col_name_regex = re.compile(r'(.*)\\s\\[(.*)\\]')
-    for column in votes.columns:
-        try:
-            match = re.match(col_name_regex, column)
-            position, name = match.groups()
-        except:
-            continue
-        counts[position][name] = 0
-    return counts
-
-def count_votes(position, votes, counts, quota, results):
-    position_df = votes.filter(like=position + ' [', axis=1).copy()
-    round_num = 1
-    round_results = []
-
-    while True:
-        for index, row in position_df.iterrows():
-            for candidate in counts[position]:
-                if row[f'{position} [{candidate}]'] == 1:
-                    counts[position][candidate] += 1
-                    position_df.at[index, f'{position} [{candidate}]'] = 0
-                    break
-
-        print(f'Round {round_num} results: {counts[position]}')
-        round_results.append(counts[position].copy())
-
-        if max(counts[position].values()) >= quota:
-            elected = max(counts[position], key=counts[position].get)
-            results[position] = elected
-            print(f'{elected} is elected as {position} after round {round_num}.')
-            break
-
-        round_counts = list(counts[position].values())
-        num_lowest = round_counts.count(min(round_counts))
-
-        if num_lowest > 1:
-            remaining = list(counts[position].keys())
-            if num_lowest == len(remaining):
-                print(f'!!! Tie for {position} after round {round_num}. Remaining candidates: {remaining}')
-                results[position] = f'Tie – {remaining}'
-                break
-
-            min_votes = min(counts[position].values())
-            tied = [c for c, v in counts[position].items() if v == min_votes]
-
-            n = 2
-            eliminated = None
-            while round_num - n >= 0:
-                prev = {c: round_results[round_num-n][c] for c in tied}
-                if list(prev.values()).count(min(prev.values())) == 1:
-                    eliminated = min(prev, key=prev.get)
-                    print(f'Tie - {eliminated} is eliminated due to lower votes in round {round_num-n+1}.')
-                    break
-                n += 1
-            if eliminated is None:
-                eliminated = random.choice(tied)
-                print(f'Tie - {eliminated} is eliminated by random choice.')
-            min_candidate = eliminated
-        else:
-            min_candidate = min(counts[position], key=counts[position].get)
-            print(f'{min_candidate} is eliminated.')
-
-        counts[position].pop(min_candidate)
-        for index, row in position_df.iterrows():
-            elim_pref = row[f'{position} [{min_candidate}]']
-            for candidate in counts[position]:
-                if row[f'{position} [{candidate}]'] > elim_pref:
-                    position_df.at[index, f'{position} [{candidate}]'] -= 1
-
-        round_num += 1
-
-# --- main ---
 try:
     votes = pd.read_csv(io.StringIO(csv_text))
     if 'Timestamp' in votes.columns:
@@ -488,25 +423,26 @@ try:
     quota = math.floor(len(votes.index) / 2 + 1)
     print(f'Quota: {quota}')
 
-    counts = make_candidate_dictionary(votes)
+    counts = make_candidate_dictionary()
     print(f'{len(counts)} positions up for vote: {list(counts.keys())}')
 
     results = {}
     for position in counts.keys():
         print(f'\\nCounting {position}...')
-        count_votes(position, votes, counts, quota, results)
+        count_votes(position)
 
     print('\\n\\n***** Results *****')
     for position, winner in results.items():
         print(f'{position}: {winner}')
 
-    import json
-    result_json = json.dumps(results)
-    print('__RESULTS_JSON__' + result_json)
+    print('__RESULTS_JSON__' + json.dumps(results))
 except Exception as e:
+    import traceback
     print(f'Error: {e}')
-    result_json = '{}'
+    print(traceback.format_exc())
 `;
+
+  const code = libraryCode + entryPoint;
 
   try {
     await pyodide.runPythonAsync(code);

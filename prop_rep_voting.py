@@ -132,6 +132,8 @@ def count_votes(position):
 
 if __name__ == "__main__":
 
+    # Sets global variables for functions, rather than passing arguments
+
     # Pass the votes file as an argument
     parser = argparse.ArgumentParser(
         description="Count votes according to a proportional representation system."
@@ -154,7 +156,8 @@ if __name__ == "__main__":
         raise ValueError(f"Failed to read CSV file: {e}")
     
     votes = pd.read_csv(filename)
-    votes = votes.drop('Timestamp', axis=1)  # Don't need timestamp
+    if 'Timestamp' in votes.columns:
+        votes = votes.drop('Timestamp', axis=1)
     check_format(votes)
 
     # Calculate quota
@@ -163,10 +166,10 @@ if __name__ == "__main__":
 
     # Assemble candidate dictionary
     counts = make_candidate_dictionary()
-    if len(counts.keys()) == 1:
-        print(f'1 position up for vote: {", ".join([pos for pos in counts.keys()])}')
+    if len(counts) == 1:
+        print(f'1 position up for vote: {", ".join(list(counts.keys()))}')
     else:
-        print(f'{len(counts.keys())} positions up for vote: {", ".join([pos for pos in counts.keys()])}')
+        print(f'{len(counts)} positions up for vote: {", ".join(list(counts.keys()))}')
     results = {}
 
     # Count votes
