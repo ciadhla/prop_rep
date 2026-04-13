@@ -170,6 +170,7 @@ if __name__ == "__main__":
         print(f'1 position up for vote: {", ".join(list(counts.keys()))}')
     else:
         print(f'{len(counts)} positions up for vote: {", ".join(list(counts.keys()))}')
+
     results = {}
 
     # Count votes

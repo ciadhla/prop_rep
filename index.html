@@ -424,7 +424,10 @@ try:
     print(f'Quota: {quota}')
 
     counts = make_candidate_dictionary()
-    print(f'{len(counts)} positions up for vote: {list(counts.keys())}')
+    if len(counts) == 1:
+        print(f'1 position up for vote: {", ".join(list(counts.keys()))}')
+    else:
+        print(f'{len(counts)} positions up for vote: {", ".join(list(counts.keys()))}')
 
     results = {}
     for position in counts.keys():
