@@ -163,7 +163,10 @@ if __name__ == "__main__":
 
     # Assemble candidate dictionary
     counts = make_candidate_dictionary()
-    print(f'{len(counts.keys())} positions up for vote: {[pos for pos in counts.keys()]}')
+    if len(counts.keys()) == 1:
+        print(f'1 position up for vote: {", ".join([pos for pos in counts.keys()])}')
+    else:
+        print(f'{len(counts.keys())} positions up for vote: {", ".join([pos for pos in counts.keys()])}')
     results = {}
 
     # Count votes
