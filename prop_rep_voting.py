@@ -86,7 +86,7 @@ def count_votes(position):
                 remaining = list(counts[position].keys())
                 print(f'!!! Tie for {position} after round {round}. '
                       f'Remaining candidates: {remaining}')
-                results[position] = f'Tie – {remaining}'
+                results[position] = f'Tie – {", ".join(remaining)}'
                 break
 
             # Eliminate intermediate ties
